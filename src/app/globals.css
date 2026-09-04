@@ -104,11 +104,11 @@
   --chart-4: oklch(0.821 0.117 173);
   --chart-5: oklch(0.45 0 0);
 
-  /* sidebar: chrome fixo em verde (#3A6604), igual nos dois temas */
-  --sidebar: oklch(0.46 0.127 133);
+  /* sidebar: chrome fixo em verde esmeralda, igual nos dois temas */
+  --sidebar: oklch(0.46 0.12 167);
   --sidebar-foreground: oklch(0.99 0 0);
   --sidebar-primary: oklch(0.99 0 0);
-  --sidebar-primary-foreground: oklch(0.46 0.127 133);
+  --sidebar-primary-foreground: oklch(0.46 0.12 167);
   --sidebar-accent: oklch(1 0 0 / 14%);
   --sidebar-accent-foreground: oklch(0.99 0 0);
   --sidebar-border: oklch(1 0 0 / 16%);
@@ -153,11 +153,11 @@
   --chart-4: oklch(0.384 0.1 152);
   --chart-5: oklch(0.65 0 0);
 
-  /* sidebar: mesmo verde fixo (#3A6604), também no modo escuro */
-  --sidebar: oklch(0.46 0.127 133);
+  /* sidebar: mesmo verde esmeralda fixo, também no modo escuro */
+  --sidebar: oklch(0.46 0.12 167);
   --sidebar-foreground: oklch(0.99 0 0);
   --sidebar-primary: oklch(0.99 0 0);
-  --sidebar-primary-foreground: oklch(0.46 0.127 133);
+  --sidebar-primary-foreground: oklch(0.46 0.12 167);
   --sidebar-accent: oklch(1 0 0 / 14%);
   --sidebar-accent-foreground: oklch(0.99 0 0);
   --sidebar-border: oklch(1 0 0 / 16%);

@@ -91,11 +91,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center justify-between gap-2 px-1 pt-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-2">
             <Link
               href="/dashboard"
-              className="min-w-0 rounded-lg bg-white px-2.5 py-1.5 group-data-[collapsible=icon]:hidden"
+              className="min-w-0 rounded-lg bg-black px-2.5 py-1.5 group-data-[collapsible=icon]:hidden"
             >
               <Image src="/logo-bebigas.png" alt="Bebigás" width={1624} height={363} priority className="h-7 w-auto" />
             </Link>
-            <Link href="/dashboard" className="hidden rounded-lg bg-white p-1.5 group-data-[collapsible=icon]:block">
+            <Link href="/dashboard" className="hidden rounded-lg bg-black p-1.5 group-data-[collapsible=icon]:block">
               <Image src="/icone-bujao.png" alt="Bebigás" width={306} height={314} className="size-6" />
             </Link>
             <SidebarTrigger className="shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
