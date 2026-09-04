@@ -31,12 +31,10 @@ type RecipeRow = { raw_material_id: string; quantidade: string };
 function FichaDialog({
   produto,
   materiais,
-  ingredientesCount,
   onSaved,
 }: {
   produto: Product;
   materiais: RawMaterial[];
-  ingredientesCount: number;
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -280,7 +278,7 @@ export default function FichaTecnicaPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <FichaDialog produto={p} materiais={materiais ?? []} ingredientesCount={count} onSaved={refresh} />
+                        <FichaDialog produto={p} materiais={materiais ?? []} onSaved={refresh} />
                       </TableCell>
                     </TableRow>
                   );
