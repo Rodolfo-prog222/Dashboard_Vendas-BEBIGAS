@@ -313,16 +313,34 @@ export default function NovaVenda() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-1">
-                      <Button size="icon" variant="outline" className="size-7" onClick={() => setQty(i.product_id, i.quantidade - 1)}>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="size-7"
+                        onClick={() => setQty(i.product_id, i.quantidade - 1)}
+                        aria-label="Diminuir quantidade"
+                      >
                         <Minus className="size-3" />
                       </Button>
                       <span className="w-6 text-center text-sm">{i.quantidade}</span>
-                      <Button size="icon" variant="outline" className="size-7" onClick={() => setQty(i.product_id, i.quantidade + 1)}>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="size-7"
+                        onClick={() => setQty(i.product_id, i.quantidade + 1)}
+                        aria-label="Aumentar quantidade"
+                      >
                         <Plus className="size-3" />
                       </Button>
                     </div>
                   )}
-                  <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => removeFromCart(i.product_id)}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 text-destructive"
+                    onClick={() => removeFromCart(i.product_id)}
+                    aria-label="Remover item do carrinho"
+                  >
                     <Trash2 className="size-3.5" />
                   </Button>
                 </div>
@@ -383,7 +401,13 @@ export default function NovaVenda() {
                   placeholder="0,00"
                 />
                 {payments.length > 1 && (
-                  <Button size="icon" variant="ghost" className="size-8 shrink-0 text-destructive" onClick={() => removePayment(idx)}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 shrink-0 text-destructive"
+                    onClick={() => removePayment(idx)}
+                    aria-label="Remover forma de pagamento"
+                  >
                     <Trash2 className="size-3.5" />
                   </Button>
                 )}

@@ -1,1 +1,8 @@
 project_id = "uitjkwswpjedtjhojwkf"
+
+# Desativa a confirmação de e-mail no cadastro (o app libera acesso
+# imediatamente após o signUp). Só tem efeito local (supabase start) ou via
+# `supabase config push`; no projeto hospedado, ajuste também pelo painel em
+# Authentication > Sign In / Providers > Email > "Confirm email".
+[auth.email]
+enable_confirmations = false

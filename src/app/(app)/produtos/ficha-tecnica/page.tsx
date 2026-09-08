@@ -156,7 +156,13 @@ function FichaDialog({
                         value={r.quantidade}
                         onChange={(e) => updateRow(idx, { quantidade: e.target.value })}
                       />
-                      <Button size="icon" variant="ghost" className="size-8 shrink-0 text-destructive" onClick={() => removeRow(idx)}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 shrink-0 text-destructive"
+                        onClick={() => removeRow(idx)}
+                        aria-label="Remover ingrediente"
+                      >
                         <Trash2 className="size-3.5" />
                       </Button>
                     </div>

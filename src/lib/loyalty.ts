@@ -31,16 +31,16 @@ export function useLoyaltySettings() {
   });
 }
 
-/** Saldo de pontos por cliente (acúmulos positivos + resgates negativos). */
+/** Saldo de pontos por cliente (acúmulos positivos + resgates negativos), agregado no banco. */
 export function useLoyaltyBalances() {
   return useQuery<Record<string, number>>({
     queryKey: ["loyalty-balances"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("loyalty_transactions").select("customer_id, pontos");
+      const { data, error } = await supabase.rpc("get_loyalty_balances");
       if (error) throw error;
       const map: Record<string, number> = {};
       for (const row of data ?? []) {
-        map[row.customer_id] = (map[row.customer_id] ?? 0) + Number(row.pontos);
+        map[row.customer_id] = Number(row.saldo);
       }
       return map;
     },

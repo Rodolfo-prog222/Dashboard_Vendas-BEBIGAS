@@ -559,6 +559,11 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      get_loyalty_balances: {
+        Args: never
+        Returns: { customer_id: string; saldo: number }[]
+      }
+      get_recurring_customers_count: { Args: never; Returns: number }
     }
     Enums: {
       app_role: "admin" | "operador"

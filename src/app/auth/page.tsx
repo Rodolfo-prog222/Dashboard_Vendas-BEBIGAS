@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { Suspense, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -22,6 +22,13 @@ function AuthForm() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
+
+  useEffect(() => {
+    if (searchParams.get("inactive") === "1") {
+      toast.error("Sua conta foi desativada por um administrador. Você foi desconectado.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function entrar(e: FormEvent) {
     e.preventDefault();

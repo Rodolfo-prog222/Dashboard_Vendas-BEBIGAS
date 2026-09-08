@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useMe } from "@/lib/auth";
 import { brl } from "@/lib/format";
 import { PageHeader } from "@/components/AppShell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,7 +79,7 @@ function ProdutoDialog({ produto, onSaved }: { produto?: Product; onSaved: () =>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {produto ? (
-          <Button size="icon" variant="ghost" className="size-8">
+          <Button size="icon" variant="ghost" className="size-8" aria-label="Editar produto">
             <Pencil className="size-3.5" />
           </Button>
         ) : (
@@ -152,6 +153,7 @@ function ProdutoDialog({ produto, onSaved }: { produto?: Product; onSaved: () =>
 export default function ProdutosPage() {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
 
   const { data: produtos, isLoading } = useQuery({
     queryKey: ["produtos-lista"],
@@ -175,7 +177,13 @@ export default function ProdutosPage() {
   }
 
   async function excluir(id: string) {
-    if (!confirm("Excluir este produto? Vendas antigas continuam com o nome salvo.")) return;
+    const ok = await confirm({
+      title: "Excluir produto",
+      description: "Excluir este produto? Vendas antigas continuam com o nome salvo.",
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("products").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Produto excluído.");
@@ -243,7 +251,13 @@ export default function ProdutosPage() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <ProdutoDialog produto={p} onSaved={refresh} />
-                          <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => excluir(p.id)}>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-8 text-destructive"
+                            onClick={() => excluir(p.id)}
+                            aria-label="Excluir produto"
+                          >
                             <Trash2 className="size-3.5" />
                           </Button>
                         </div>

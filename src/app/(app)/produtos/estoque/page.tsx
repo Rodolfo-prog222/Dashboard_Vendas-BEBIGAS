@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useMe } from "@/lib/auth";
 import { num } from "@/lib/format";
 import { PageHeader } from "@/components/AppShell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,7 +79,7 @@ function MaterialDialog({ material, onSaved }: { material?: RawMaterial; onSaved
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {material ? (
-          <Button size="icon" variant="ghost" className="size-8">
+          <Button size="icon" variant="ghost" className="size-8" aria-label="Editar matéria-prima">
             <Pencil className="size-3.5" />
           </Button>
         ) : (
@@ -152,6 +153,7 @@ function MaterialDialog({ material, onSaved }: { material?: RawMaterial; onSaved
 export default function EstoquePage() {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
 
   const { data: materiais, isLoading } = useQuery({
     queryKey: ["estoque-lista"],
@@ -174,8 +176,13 @@ export default function EstoquePage() {
   }
 
   async function excluir(id: string) {
-    if (!confirm("Excluir esta matéria-prima? Isso falha se ela já tiver compras ou fichas técnicas vinculadas."))
-      return;
+    const ok = await confirm({
+      title: "Excluir matéria-prima",
+      description: "Excluir esta matéria-prima? Isso falha se ela já tiver compras ou fichas técnicas vinculadas.",
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("raw_materials").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Matéria-prima excluída.");
@@ -250,7 +257,13 @@ export default function EstoquePage() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <MaterialDialog material={m} onSaved={refresh} />
-                          <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => excluir(m.id)}>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-8 text-destructive"
+                            onClick={() => excluir(m.id)}
+                            aria-label="Excluir matéria-prima"
+                          >
                             <Trash2 className="size-3.5" />
                           </Button>
                         </div>

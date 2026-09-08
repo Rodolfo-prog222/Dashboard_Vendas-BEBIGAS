@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useMe } from "@/lib/auth";
 import { dateBR, num, todayISO } from "@/lib/format";
 import { PageHeader } from "@/components/AppShell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,6 +146,7 @@ function ProducaoDialog({ produtos, onSaved }: { produtos: Product[]; onSaved: (
 export default function ProducaoPage() {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
 
   const { data: produtos } = useQuery({
     queryKey: ["produtos-ativos"],
@@ -181,8 +183,13 @@ export default function ProducaoPage() {
   }
 
   async function excluir(id: string) {
-    if (!confirm("Excluir este registro de produção? O estoque já descontado NÃO será revertido automaticamente."))
-      return;
+    const ok = await confirm({
+      title: "Excluir registro de produção",
+      description: "Excluir este registro de produção? O estoque já descontado NÃO será revertido automaticamente.",
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("production").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Registro excluído.");
@@ -247,7 +254,13 @@ export default function ProducaoPage() {
                     <TableCell className="text-right">{num(e.quantidade, 3)}</TableCell>
                     <TableCell className="text-muted-foreground">{e.observacoes ?? "-"}</TableCell>
                     <TableCell className="text-right">
-                      <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => excluir(e.id)}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 text-destructive"
+                        onClick={() => excluir(e.id)}
+                        aria-label="Excluir registro de produção"
+                      >
                         <Trash2 className="size-3.5" />
                       </Button>
                     </TableCell>

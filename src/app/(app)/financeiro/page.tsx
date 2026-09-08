@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useMe } from "@/lib/auth";
 import { brl, dateBR, downloadCSV, todayISO, addDaysISO, weekdayName } from "@/lib/format";
 import { PageHeader } from "@/components/AppShell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -105,6 +106,7 @@ export default function FinanceiroPage() {
   const { data: me } = useMe();
   const isAdmin = !!me?.isAdmin;
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const hoje = todayISO();
   const [de, setDe] = useState(addDaysISO(hoje, -29));
   const [ate, setAte] = useState(hoje);
@@ -153,7 +155,8 @@ export default function FinanceiroPage() {
   }
 
   async function excluirDespesa(id: string) {
-    if (!confirm("Excluir esta despesa?")) return;
+    const ok = await confirm({ title: "Excluir despesa", description: "Excluir esta despesa?", confirmLabel: "Excluir", destructive: true });
+    if (!ok) return;
     const { error } = await supabase.from("expenses").delete().eq("id", id);
     if (error) return toast.error(error.message);
     refresh();
@@ -270,7 +273,13 @@ export default function FinanceiroPage() {
                   <TableCell className="capitalize text-muted-foreground">{d.categoria}</TableCell>
                   <TableCell className="text-right font-medium">{brl(Number(d.valor))}</TableCell>
                   <TableCell className="text-right">
-                    <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => excluirDespesa(d.id)}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-8 text-destructive"
+                      onClick={() => excluirDespesa(d.id)}
+                      aria-label="Excluir despesa"
+                    >
                       <Trash2 className="size-3.5" />
                     </Button>
                   </TableCell>

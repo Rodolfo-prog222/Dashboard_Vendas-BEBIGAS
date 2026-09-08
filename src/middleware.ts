@@ -49,6 +49,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  if (isProtected && user) {
+    const { data: profile } = await supabase.from("profiles").select("ativo").eq("id", user.id).maybeSingle();
+    if (profile && !profile.ativo) {
+      await supabase.auth.signOut();
+      const redirectUrl = new URL("/auth", request.url);
+      redirectUrl.searchParams.set("inactive", "1");
+      return NextResponse.redirect(redirectUrl);
+    }
+  }
+
   if ((pathname === "/auth" || pathname === "/") && user) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }

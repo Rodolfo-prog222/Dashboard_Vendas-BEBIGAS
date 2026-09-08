@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useMe } from "@/lib/auth";
 import { brl, dateBR, num, todayISO } from "@/lib/format";
 import { PageHeader } from "@/components/AppShell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -188,6 +189,7 @@ function CompraDialog({ materiais, onSaved }: { materiais: RawMaterial[]; onSave
 export default function ComprasPage() {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
 
   const { data: materiais } = useQuery({
     queryKey: ["materiais-ativos"],
@@ -223,8 +225,14 @@ export default function ComprasPage() {
   }
 
   async function excluir(id: string) {
-    if (!confirm("Excluir esta compra? O estoque já somado NÃO será revertido automaticamente — ajuste manualmente em Estoque se necessário."))
-      return;
+    const ok = await confirm({
+      title: "Excluir compra",
+      description:
+        "Excluir esta compra? O estoque já somado NÃO será revertido automaticamente — ajuste manualmente em Estoque se necessário.",
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("purchases").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Compra excluída.");
@@ -296,7 +304,13 @@ export default function ComprasPage() {
                     <TableCell className="text-right font-medium">{brl(c.valor_total)}</TableCell>
                     <TableCell className="text-muted-foreground">{c.fornecedor ?? "-"}</TableCell>
                     <TableCell className="text-right">
-                      <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => excluir(c.id)}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 text-destructive"
+                        onClick={() => excluir(c.id)}
+                        aria-label="Excluir compra"
+                      >
                         <Trash2 className="size-3.5" />
                       </Button>
                     </TableCell>

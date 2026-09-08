@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useLoyaltySettings } from "@/lib/loyalty";
 import { brl, dateBR } from "@/lib/format";
 import { PageHeader } from "@/components/AppShell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,7 @@ export default function ClienteDetalhe({ params }: { params: Promise<{ id: strin
   const queryClient = useQueryClient();
   const { data: me } = useMe();
   const { data: settings } = useLoyaltySettings();
+  const confirm = useConfirm();
 
   const { data: cliente, isLoading } = useQuery({
     queryKey: ["cliente", id],
@@ -94,7 +96,13 @@ export default function ClienteDetalhe({ params }: { params: Promise<{ id: strin
   }
 
   async function excluir() {
-    if (!confirm(`Excluir o cliente ${cliente?.nome}? Essa ação não pode ser desfeita.`)) return;
+    const ok = await confirm({
+      title: "Excluir cliente",
+      description: `Excluir o cliente ${cliente?.nome}? Essa ação não pode ser desfeita.`,
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("customers").delete().eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Cliente excluído.");

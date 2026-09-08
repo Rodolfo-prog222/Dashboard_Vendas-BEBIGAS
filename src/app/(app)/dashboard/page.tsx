@@ -106,12 +106,12 @@ export default function Dashboard() {
     },
   });
 
-  const { data: vendasTodasCustomerIds } = useQuery({
-    queryKey: ["dashboard-sales-customer-ids"],
+  const { data: recorrenciaCount } = useQuery({
+    queryKey: ["dashboard-recurring-customers-count"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("sales").select("customer_id").not("customer_id", "is", null);
+      const { data, error } = await supabase.rpc("get_recurring_customers_count");
       if (error) throw error;
-      return data ?? [];
+      return Number(data ?? 0);
     },
   });
 
@@ -140,15 +140,6 @@ export default function Dashboard() {
   const abertos = (vendasMes ?? []).filter((v) => v.status !== "entregue");
 
   const novosClientesMes = (clientes ?? []).filter((c) => (c.created_at?.slice(0, 10) ?? "") >= mesInicio).length;
-
-  const recorrenciaCount = useMemo(() => {
-    const porCliente = new Map<string, number>();
-    for (const v of vendasTodasCustomerIds ?? []) {
-      if (!v.customer_id) continue;
-      porCliente.set(v.customer_id, (porCliente.get(v.customer_id) ?? 0) + 1);
-    }
-    return [...porCliente.values()].filter((n) => n >= 2).length;
-  }, [vendasTodasCustomerIds]);
 
   const aniversariantes = (clientes ?? []).filter((c) => {
     if (!c.nascimento) return false;
@@ -231,7 +222,7 @@ export default function Dashboard() {
           icon={PiggyBank}
           tone={lucroMes >= 0 ? "positive" : "negative"}
         />
-        <StatCard label="Recorrência" value={String(recorrenciaCount)} hint="Clientes com 2+ compras" icon={Repeat} />
+        <StatCard label="Recorrência" value={String(recorrenciaCount ?? 0)} hint="Clientes com 2+ compras" icon={Repeat} />
         <StatCard label="Novos clientes" value={String(novosClientesMes)} hint={`Cadastrados em ${mesNome.toLowerCase()}`} icon={UserPlus} />
       </div>
 
