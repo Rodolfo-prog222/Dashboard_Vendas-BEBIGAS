@@ -201,13 +201,19 @@ function FichaDialog({
                 <Input type="number" min={0} step="0.0001" className="w-32" value={fator} onChange={(e) => setFator(e.target.value)} required />
                 <p className="text-xs text-muted-foreground">
                   Quantas unidades de {baseSelecionado ? `"${baseSelecionado.nome}"` : "estoque do produto base"} 1 unidade deste produto
-                  consome (ex.: 2,33).
+                  consome. Ex.: fator 2,33 quer dizer que vender 1 unidade daqui desconta 2,33 unidades do estoque do produto base — e o
+                  custo daqui é o custo do produto base × esse fator.
                 </p>
               </div>
               {baseProductId && (
                 <p className="text-sm">
                   <span className="text-muted-foreground">Custo calculado: </span>
                   <span className="font-semibold">{brl(custoVariacao)}</span>
+                  {custoVariacao === 0 && (
+                    <span className="ml-2 text-xs text-warning-foreground">
+                      (o produto base ainda não tem custo — preencha a ficha técnica ou uma compra dele primeiro)
+                    </span>
+                  )}
                 </p>
               )}
             </div>
