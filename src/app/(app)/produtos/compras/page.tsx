@@ -269,6 +269,7 @@ export default function ComprasPage() {
         .select("id, nome, unidade")
         .eq("ativo", true)
         .eq("terceirizado", true)
+        .is("base_product_id", null)
         .order("nome");
       if (error) throw error;
       return (data ?? []) as ResaleProduct[];

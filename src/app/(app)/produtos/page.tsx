@@ -39,6 +39,8 @@ type Product = {
   ativo: boolean;
   terceirizado: boolean;
   estoque_atual: number;
+  base_product_id: string | null;
+  fator_conversao: number;
 };
 
 const CATEGORIAS = ["comida", "sobremesa"];
@@ -222,6 +224,7 @@ export default function ProdutosPage() {
   }
 
   const isAdmin = !!me?.isAdmin;
+  const produtosPorId = Object.fromEntries((produtos ?? []).map((p) => [p.id, p]));
 
   return (
     <div>
@@ -263,9 +266,18 @@ export default function ProdutosPage() {
               (produtos ?? []).map((p) => {
                 const custo = custosProdutos?.[p.id] ?? p.custo;
                 const margem = p.preco > 0 ? ((p.preco - custo) / p.preco) * 100 : 0;
+                const produtoBase = p.base_product_id ? produtosPorId[p.base_product_id] : undefined;
+                const estoque = produtoBase ? produtoBase.estoque_atual / p.fator_conversao : p.estoque_atual;
                 return (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.nome}</TableCell>
+                    <TableCell className="font-medium">
+                      {p.nome}
+                      {produtoBase && (
+                        <p className="text-xs font-normal text-muted-foreground">
+                          Variação de {produtoBase.nome} ({num(p.fator_conversao, 4)}x)
+                        </p>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="capitalize">
                         {p.categoria}
@@ -274,8 +286,8 @@ export default function ProdutosPage() {
                     <TableCell className="text-right">{brl(p.preco)}</TableCell>
                     <TableCell className="text-right text-muted-foreground">{brl(custo)}</TableCell>
                     <TableCell className="text-right">{margem.toFixed(0)}%</TableCell>
-                    <TableCell className={cn("text-right", p.estoque_atual <= 0 && "text-destructive")}>
-                      {num(p.estoque_atual, 3)} {p.unidade}
+                    <TableCell className={cn("text-right", estoque <= 0 && "text-destructive")}>
+                      {num(estoque, 3)} {p.unidade}
                     </TableCell>
                     <TableCell>
                       <Switch checked={p.disponivel_hoje} disabled={!isAdmin} onCheckedChange={(v) => toggle(p.id, "disponivel_hoje", v)} />

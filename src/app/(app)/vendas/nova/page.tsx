@@ -29,6 +29,8 @@ type Product = {
   custo: number;
   unidade: string;
   estoque_atual: number;
+  base_product_id: string | null;
+  fator_conversao: number;
 };
 
 type CartItem = {
@@ -42,6 +44,27 @@ type CartItem = {
 
 type Payment = { metodo: (typeof PAYMENT_METHODS)[number]; valor: number };
 
+// Uma variação (ex.: "Grande") não tem estoque próprio — compartilha o estoque do
+// produto base (ex.: "Pequeno"), consumindo `fator_conversao` unidades dele por venda.
+function baseIdOf(p: Product) {
+  return p.base_product_id ?? p.id;
+}
+function fatorOf(p: Product) {
+  return p.base_product_id ? p.fator_conversao : 1;
+}
+function estoqueDisponivel(p: Product, products: Product[]) {
+  const base = products.find((x) => x.id === baseIdOf(p));
+  return (base?.estoque_atual ?? 0) / fatorOf(p);
+}
+/** Soma, em unidades equivalentes do produto base, tudo que já está no carrinho para esse mesmo base (outras variações incluídas). */
+function consumidoNoCarrinho(baseId: string, cart: CartItem[], products: Product[]) {
+  return cart.reduce((sum, item) => {
+    const ip = products.find((x) => x.id === item.product_id);
+    if (!ip || baseIdOf(ip) !== baseId) return sum;
+    return sum + item.quantidade * fatorOf(ip);
+  }, 0);
+}
+
 export default function NovaVenda() {
   const router = useRouter();
   const { data: me } = useMe();
@@ -52,7 +75,7 @@ export default function NovaVenda() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, nome, categoria, preco, custo, unidade, estoque_atual")
+        .select("id, nome, categoria, preco, custo, unidade, estoque_atual, base_product_id, fator_conversao")
         .eq("ativo", true)
         .order("categoria")
         .order("nome");
@@ -96,9 +119,13 @@ export default function NovaVenda() {
   const selectedCustomer = customers?.find((c) => c.id === customerId);
 
   function addToCart(p: Product) {
-    const noCarrinho = cart.find((i) => i.product_id === p.id)?.quantidade ?? 0;
-    if (noCarrinho + 1 > p.estoque_atual) {
-      toast.error(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque_atual} ${p.unidade}).`);
+    const baseId = baseIdOf(p);
+    const fator = fatorOf(p);
+    const baseEstoque = products?.find((x) => x.id === baseId)?.estoque_atual ?? 0;
+    const jaConsumido = consumidoNoCarrinho(baseId, cart, products ?? []);
+    if (jaConsumido + fator > baseEstoque) {
+      const restante = Math.max(0, (baseEstoque - jaConsumido) / fator);
+      toast.error(`Estoque insuficiente de "${p.nome}" (disponível: ${num(restante, 3)} ${p.unidade}).`);
       return;
     }
     setCart((prev) => {
@@ -121,10 +148,21 @@ export default function NovaVenda() {
   }
 
   function setQty(id: string, qty: number) {
-    const estoque = products?.find((p) => p.id === id)?.estoque_atual ?? Infinity;
-    if (qty > estoque) {
-      toast.error(`Estoque insuficiente (disponível: ${estoque}).`);
-      qty = estoque;
+    const p = products?.find((x) => x.id === id);
+    if (p && qty > 0) {
+      const baseId = baseIdOf(p);
+      const fator = fatorOf(p);
+      const baseEstoque = products?.find((x) => x.id === baseId)?.estoque_atual ?? 0;
+      const outrosConsumo = consumidoNoCarrinho(
+        baseId,
+        cart.filter((i) => i.product_id !== id),
+        products ?? [],
+      );
+      const maxQty = fator > 0 ? (baseEstoque - outrosConsumo) / fator : 0;
+      if (qty > maxQty) {
+        toast.error(`Estoque insuficiente (disponível: ${num(Math.max(0, maxQty), 3)} ${p.unidade}).`);
+        qty = Math.max(0, maxQty);
+      }
     }
     setCart((prev) =>
       qty <= 0 ? prev.filter((i) => i.product_id !== id) : prev.map((i) => (i.product_id === id ? { ...i, quantidade: qty } : i)),
@@ -223,7 +261,8 @@ export default function NovaVenda() {
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {items.map((p) => {
-            const semEstoque = p.estoque_atual <= 0;
+            const estoque = estoqueDisponivel(p, products ?? []);
+            const semEstoque = estoque <= 0;
             return (
               <button
                 key={p.id}
@@ -234,7 +273,7 @@ export default function NovaVenda() {
                 <span className="text-sm font-medium leading-tight">{p.nome}</span>
                 <span className="text-xs text-muted-foreground">{brl(p.preco)} / {p.unidade}</span>
                 <span className={cn("text-[11px]", semEstoque ? "text-destructive" : "text-muted-foreground")}>
-                  {semEstoque ? "Sem estoque" : `${num(p.estoque_atual, 3)} ${p.unidade} em estoque`}
+                  {semEstoque ? "Sem estoque" : `${num(estoque, 3)} ${p.unidade} em estoque`}
                 </span>
               </button>
             );

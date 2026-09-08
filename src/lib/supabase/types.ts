@@ -222,11 +222,13 @@ export type Database = {
       products: {
         Row: {
           ativo: boolean
+          base_product_id: string | null
           categoria: string
           created_at: string
           custo: number
           disponivel_hoje: boolean
           estoque_atual: number
+          fator_conversao: number
           id: string
           nome: string
           preco: number
@@ -237,11 +239,13 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean
+          base_product_id?: string | null
           categoria?: string
           created_at?: string
           custo?: number
           disponivel_hoje?: boolean
           estoque_atual?: number
+          fator_conversao?: number
           id?: string
           nome: string
           preco?: number
@@ -252,11 +256,13 @@ export type Database = {
         }
         Update: {
           ativo?: boolean
+          base_product_id?: string | null
           categoria?: string
           created_at?: string
           custo?: number
           disponivel_hoje?: boolean
           estoque_atual?: number
+          fator_conversao?: number
           id?: string
           nome?: string
           preco?: number
@@ -265,7 +271,15 @@ export type Database = {
           unidade?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "products_base_product_id_fkey"
+            columns: ["base_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

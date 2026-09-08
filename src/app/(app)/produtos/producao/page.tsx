@@ -156,6 +156,7 @@ export default function ProducaoPage() {
         .select("id, nome, terceirizado, estoque_atual, unidade")
         .eq("ativo", true)
         .eq("terceirizado", false)
+        .is("base_product_id", null)
         .order("nome");
       if (error) throw error;
       return (data ?? []) as Product[];

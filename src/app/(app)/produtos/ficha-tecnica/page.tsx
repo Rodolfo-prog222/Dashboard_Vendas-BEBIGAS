@@ -8,13 +8,12 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useMe } from "@/lib/auth";
 import { useProductsCusto, useRawMaterialsLastCost } from "@/lib/products";
-import { brl } from "@/lib/format";
+import { brl, num } from "@/lib/format";
 import { PageHeader } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -26,32 +25,50 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-type Product = { id: string; nome: string; categoria: string; unidade: string; terceirizado: boolean; rendimento: number };
+type Product = {
+  id: string;
+  nome: string;
+  categoria: string;
+  unidade: string;
+  terceirizado: boolean;
+  rendimento: number;
+  base_product_id: string | null;
+  fator_conversao: number;
+};
 type RawMaterial = { id: string; nome: string; unidade: string };
 type RecipeRow = { raw_material_id: string; quantidade: string };
+type Modo = "receita" | "terceirizado" | "variacao";
 
 function FichaDialog({
   produto,
   materiais,
   custosMateriais,
+  produtosBase,
+  custosProdutos,
   onSaved,
 }: {
   produto: Product;
   materiais: RawMaterial[];
   custosMateriais: Record<string, number>;
+  produtosBase: Product[];
+  custosProdutos: Record<string, number>;
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [terceirizado, setTerceirizado] = useState(produto.terceirizado);
+  const [modo, setModo] = useState<Modo>("receita");
   const [rendimento, setRendimento] = useState(String(produto.rendimento));
+  const [baseProductId, setBaseProductId] = useState("");
+  const [fator, setFator] = useState("1");
   const [rows, setRows] = useState<RecipeRow[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    setTerceirizado(produto.terceirizado);
+    setModo(produto.base_product_id ? "variacao" : produto.terceirizado ? "terceirizado" : "receita");
     setRendimento(String(produto.rendimento));
+    setBaseProductId(produto.base_product_id ?? "");
+    setFator(String(produto.fator_conversao));
     setLoading(true);
     supabase
       .from("recipe_items")
@@ -67,6 +84,8 @@ function FichaDialog({
 
   const custoLote = rows.reduce((s, r) => s + (Number(r.quantidade) || 0) * (custosMateriais[r.raw_material_id] ?? 0), 0);
   const custoPorUnidade = Number(rendimento) > 0 ? custoLote / Number(rendimento) : 0;
+  const baseSelecionado = produtosBase.find((p) => p.id === baseProductId);
+  const custoVariacao = (custosProdutos[baseProductId] ?? 0) * (Number(fator) || 0);
 
   function addRow() {
     setRows((prev) => [...prev, { raw_material_id: "", quantidade: "" }]);
@@ -81,24 +100,35 @@ function FichaDialog({
   async function salvar(e: FormEvent) {
     e.preventDefault();
     const validRows = rows.filter((r) => r.raw_material_id && Number(r.quantidade) > 0);
-    if (!terceirizado && validRows.length === 0) {
-      return toast.error("Adicione ao menos um ingrediente, ou marque como terceirizado.");
+    if (modo === "receita" && validRows.length === 0) {
+      return toast.error("Adicione ao menos um ingrediente, ou escolha outro modo.");
     }
-    if (!terceirizado && (!rendimento || Number(rendimento) <= 0)) {
+    if (modo === "receita" && (!rendimento || Number(rendimento) <= 0)) {
       return toast.error("Informe quantas unidades o lote rende.");
+    }
+    if (modo === "variacao" && !baseProductId) {
+      return toast.error("Selecione o produto base.");
+    }
+    if (modo === "variacao" && (!fator || Number(fator) <= 0)) {
+      return toast.error("Informe o fator de conversão.");
     }
     setSaving(true);
     try {
       const { error: prodError } = await supabase
         .from("products")
-        .update({ terceirizado, rendimento: terceirizado ? 1 : Number(rendimento) })
+        .update({
+          terceirizado: modo === "terceirizado",
+          rendimento: modo === "receita" ? Number(rendimento) : 1,
+          base_product_id: modo === "variacao" ? baseProductId : null,
+          fator_conversao: modo === "variacao" ? Number(fator) : 1,
+        })
         .eq("id", produto.id);
       if (prodError) throw prodError;
 
       const { error: delError } = await supabase.from("recipe_items").delete().eq("product_id", produto.id);
       if (delError) throw delError;
 
-      if (!terceirizado && validRows.length > 0) {
+      if (modo === "receita" && validRows.length > 0) {
         const payload = validRows.map((r) => ({
           product_id: produto.id,
           raw_material_id: r.raw_material_id,
@@ -130,15 +160,60 @@ function FichaDialog({
           <DialogTitle>Ficha técnica — {produto.nome}</DialogTitle>
         </DialogHeader>
         <form onSubmit={salvar} className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div>
-              <Label>Terceirizado</Label>
-              <p className="text-xs text-muted-foreground">Comprado pronto de terceiros — não consome estoque.</p>
-            </div>
-            <Switch checked={terceirizado} onCheckedChange={setTerceirizado} />
+          <div className="space-y-1.5">
+            <Label>Como este produto é abastecido</Label>
+            <Select value={modo} onValueChange={(v) => setModo(v as Modo)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="receita">Receita própria (ficha técnica)</SelectItem>
+                <SelectItem value="terceirizado">Terceirizado (comprado pronto)</SelectItem>
+                <SelectItem value="variacao">Variação de outro produto (mesmo estoque)</SelectItem>
+              </SelectContent>
+            </Select>
+            {modo === "terceirizado" && (
+              <p className="text-xs text-muted-foreground">Comprado pronto de terceiros — estoque entra pela tela de Compras.</p>
+            )}
           </div>
 
-          {!terceirizado && (
+          {modo === "variacao" && (
+            <div className="space-y-3 rounded-lg border p-3">
+              <div className="space-y-1.5">
+                <Label>Produto base (mesmo estoque)</Label>
+                <Select value={baseProductId} onValueChange={setBaseProductId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {produtosBase
+                      .filter((p) => p.id !== produto.id)
+                      .map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nome} ({p.unidade})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Fator de conversão</Label>
+                <Input type="number" min={0} step="0.0001" className="w-32" value={fator} onChange={(e) => setFator(e.target.value)} required />
+                <p className="text-xs text-muted-foreground">
+                  Quantas unidades de {baseSelecionado ? `"${baseSelecionado.nome}"` : "estoque do produto base"} 1 unidade deste produto
+                  consome (ex.: 2,33).
+                </p>
+              </div>
+              {baseProductId && (
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Custo calculado: </span>
+                  <span className="font-semibold">{brl(custoVariacao)}</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {modo === "receita" && (
             <div className="space-y-1.5">
               <Label>Rende quantas {produto.unidade}(s)</Label>
               <Input
@@ -156,7 +231,7 @@ function FichaDialog({
             </div>
           )}
 
-          {!terceirizado && (
+          {modo === "receita" && (
             <div className="space-y-2">
               <Label>Ingredientes do lote (receita completa)</Label>
               {loading ? (
@@ -208,7 +283,7 @@ function FichaDialog({
             </div>
           )}
 
-          {!terceirizado && rows.length > 0 && (
+          {modo === "receita" && rows.length > 0 && (
             <div className="surface flex items-center justify-between p-3 text-sm">
               <span className="text-muted-foreground">Custo do lote: {brl(custoLote)}</span>
               <span className="font-semibold">Custo por {produto.unidade}: {brl(custoPorUnidade)}</span>
@@ -235,7 +310,7 @@ export default function FichaTecnicaPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, nome, categoria, unidade, terceirizado, rendimento")
+        .select("id, nome, categoria, unidade, terceirizado, rendimento, base_product_id, fator_conversao")
         .order("categoria")
         .order("nome");
       if (error) throw error;
@@ -274,11 +349,14 @@ export default function FichaTecnicaPage() {
     queryClient.invalidateQueries({ queryKey: ["produtos-lista"] });
     queryClient.invalidateQueries({ queryKey: ["produtos-ativos"] });
     queryClient.invalidateQueries({ queryKey: ["produtos-ativos-producao"] });
+    queryClient.invalidateQueries({ queryKey: ["produtos-terceirizados-ativos"] });
     queryClient.invalidateQueries({ queryKey: ["ficha-tecnica-counts"] });
     queryClient.invalidateQueries({ queryKey: ["products-custo"] });
   }
 
   const isAdmin = !!me?.isAdmin;
+  const produtosBase = (produtos ?? []).filter((p) => !p.base_product_id);
+  const produtosPorId = Object.fromEntries((produtos ?? []).map((p) => [p.id, p]));
 
   return (
     <div>
@@ -312,6 +390,7 @@ export default function FichaTecnicaPage() {
               ) : (
                 (produtos ?? []).map((p) => {
                   const count = itemCounts?.[p.id] ?? 0;
+                  const produtoBase = p.base_product_id ? produtosPorId[p.base_product_id] : undefined;
                   return (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.nome}</TableCell>
@@ -321,7 +400,11 @@ export default function FichaTecnicaPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {p.terceirizado ? (
+                        {produtoBase ? (
+                          <span className="text-sm text-muted-foreground">
+                            Variação de {produtoBase.nome} ({num(p.fator_conversao, 4)}x)
+                          </span>
+                        ) : p.terceirizado ? (
                           <Badge variant="secondary">Terceirizado</Badge>
                         ) : count > 0 ? (
                           <span className="text-sm text-muted-foreground">{count} ingrediente(s)</span>
@@ -337,6 +420,8 @@ export default function FichaTecnicaPage() {
                           produto={p}
                           materiais={materiais ?? []}
                           custosMateriais={custosMateriais ?? {}}
+                          produtosBase={produtosBase}
+                          custosProdutos={custosProdutos ?? {}}
                           onSaved={refresh}
                         />
                       </TableCell>
@@ -351,3 +436,4 @@ export default function FichaTecnicaPage() {
     </div>
   );
 }
+
