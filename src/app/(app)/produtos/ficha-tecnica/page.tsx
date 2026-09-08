@@ -7,6 +7,8 @@ import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useMe } from "@/lib/auth";
+import { useProductsCusto, useRawMaterialsLastCost } from "@/lib/products";
+import { brl } from "@/lib/format";
 import { PageHeader } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,28 +26,32 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-type Product = { id: string; nome: string; categoria: string; terceirizado: boolean };
+type Product = { id: string; nome: string; categoria: string; unidade: string; terceirizado: boolean; rendimento: number };
 type RawMaterial = { id: string; nome: string; unidade: string };
 type RecipeRow = { raw_material_id: string; quantidade: string };
 
 function FichaDialog({
   produto,
   materiais,
+  custosMateriais,
   onSaved,
 }: {
   produto: Product;
   materiais: RawMaterial[];
+  custosMateriais: Record<string, number>;
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [terceirizado, setTerceirizado] = useState(produto.terceirizado);
+  const [rendimento, setRendimento] = useState(String(produto.rendimento));
   const [rows, setRows] = useState<RecipeRow[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setTerceirizado(produto.terceirizado);
+    setRendimento(String(produto.rendimento));
     setLoading(true);
     supabase
       .from("recipe_items")
@@ -58,6 +64,9 @@ function FichaDialog({
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const custoLote = rows.reduce((s, r) => s + (Number(r.quantidade) || 0) * (custosMateriais[r.raw_material_id] ?? 0), 0);
+  const custoPorUnidade = Number(rendimento) > 0 ? custoLote / Number(rendimento) : 0;
 
   function addRow() {
     setRows((prev) => [...prev, { raw_material_id: "", quantidade: "" }]);
@@ -75,9 +84,15 @@ function FichaDialog({
     if (!terceirizado && validRows.length === 0) {
       return toast.error("Adicione ao menos um ingrediente, ou marque como terceirizado.");
     }
+    if (!terceirizado && (!rendimento || Number(rendimento) <= 0)) {
+      return toast.error("Informe quantas unidades o lote rende.");
+    }
     setSaving(true);
     try {
-      const { error: prodError } = await supabase.from("products").update({ terceirizado }).eq("id", produto.id);
+      const { error: prodError } = await supabase
+        .from("products")
+        .update({ terceirizado, rendimento: terceirizado ? 1 : Number(rendimento) })
+        .eq("id", produto.id);
       if (prodError) throw prodError;
 
       const { error: delError } = await supabase.from("recipe_items").delete().eq("product_id", produto.id);
@@ -124,8 +139,26 @@ function FichaDialog({
           </div>
 
           {!terceirizado && (
+            <div className="space-y-1.5">
+              <Label>Rende quantas {produto.unidade}(s)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.001"
+                className="w-32"
+                value={rendimento}
+                onChange={(e) => setRendimento(e.target.value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Quantas unidades/porções o lote abaixo rende quando produzido inteiro.
+              </p>
+            </div>
+          )}
+
+          {!terceirizado && (
             <div className="space-y-2">
-              <Label>Ingredientes (consumo por unidade produzida)</Label>
+              <Label>Ingredientes do lote (receita completa)</Label>
               {loading ? (
                 <p className="text-sm text-muted-foreground">Carregando...</p>
               ) : (
@@ -175,6 +208,13 @@ function FichaDialog({
             </div>
           )}
 
+          {!terceirizado && rows.length > 0 && (
+            <div className="surface flex items-center justify-between p-3 text-sm">
+              <span className="text-muted-foreground">Custo do lote: {brl(custoLote)}</span>
+              <span className="font-semibold">Custo por {produto.unidade}: {brl(custoPorUnidade)}</span>
+            </div>
+          )}
+
           <DialogFooter>
             <Button type="submit" disabled={saving || loading}>
               {saving && <Loader2 className="size-4 animate-spin" />} Salvar
@@ -195,7 +235,7 @@ export default function FichaTecnicaPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, nome, categoria, terceirizado")
+        .select("id, nome, categoria, unidade, terceirizado, rendimento")
         .order("categoria")
         .order("nome");
       if (error) throw error;
@@ -216,6 +256,9 @@ export default function FichaTecnicaPage() {
     },
   });
 
+  const { data: custosMateriais } = useRawMaterialsLastCost();
+  const { data: custosProdutos } = useProductsCusto();
+
   const { data: itemCounts } = useQuery({
     queryKey: ["ficha-tecnica-counts"],
     queryFn: async () => {
@@ -230,7 +273,9 @@ export default function FichaTecnicaPage() {
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["produtos-lista"] });
     queryClient.invalidateQueries({ queryKey: ["produtos-ativos"] });
+    queryClient.invalidateQueries({ queryKey: ["produtos-ativos-producao"] });
     queryClient.invalidateQueries({ queryKey: ["ficha-tecnica-counts"] });
+    queryClient.invalidateQueries({ queryKey: ["products-custo"] });
   }
 
   const isAdmin = !!me?.isAdmin;
@@ -253,13 +298,14 @@ export default function FichaTecnicaPage() {
                 <TableHead>Produto</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead>Ficha técnica</TableHead>
+                <TableHead className="text-right">Custo/unidade</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                     Carregando...
                   </TableCell>
                 </TableRow>
@@ -283,8 +329,16 @@ export default function FichaTecnicaPage() {
                           <span className="text-sm text-warning-foreground">Sem ficha cadastrada</span>
                         )}
                       </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {brl(custosProdutos?.[p.id] ?? 0)}
+                      </TableCell>
                       <TableCell className="text-right">
-                        <FichaDialog produto={p} materiais={materiais ?? []} onSaved={refresh} />
+                        <FichaDialog
+                          produto={p}
+                          materiais={materiais ?? []}
+                          custosMateriais={custosMateriais ?? {}}
+                          onSaved={refresh}
+                        />
                       </TableCell>
                     </TableRow>
                   );

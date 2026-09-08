@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -26,10 +27,12 @@ import {
 } from "@/components/ui/dialog";
 
 type RawMaterial = { id: string; nome: string; unidade: string };
+type ResaleProduct = { id: string; nome: string; unidade: string };
 
 type Purchase = {
   id: string;
-  raw_material_id: string;
+  raw_material_id: string | null;
+  product_id: string | null;
   quantidade: number;
   preco_unitario: number;
   valor_total: number;
@@ -37,11 +40,14 @@ type Purchase = {
   data_compra: string;
   observacoes: string | null;
   raw_materials: { nome: string; unidade: string } | null;
+  products: { nome: string; unidade: string } | null;
 };
 
 function emptyForm() {
   return {
+    tipo: "materia_prima" as "materia_prima" | "produto",
     raw_material_id: "",
+    product_id: "",
     quantidade: "",
     preco_unitario: "",
     valor_total: "",
@@ -51,7 +57,15 @@ function emptyForm() {
   };
 }
 
-function CompraDialog({ materiais, onSaved }: { materiais: RawMaterial[]; onSaved: () => void }) {
+function CompraDialog({
+  materiais,
+  produtosRevenda,
+  onSaved,
+}: {
+  materiais: RawMaterial[];
+  produtosRevenda: ResaleProduct[];
+  onSaved: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm());
@@ -67,11 +81,13 @@ function CompraDialog({ materiais, onSaved }: { materiais: RawMaterial[]; onSave
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
-    if (!form.raw_material_id) return toast.error("Selecione a matéria-prima.");
+    if (form.tipo === "materia_prima" && !form.raw_material_id) return toast.error("Selecione a matéria-prima.");
+    if (form.tipo === "produto" && !form.product_id) return toast.error("Selecione o produto.");
     if (!form.quantidade || Number(form.quantidade) <= 0) return toast.error("Informe a quantidade comprada.");
     setSaving(true);
     const { error } = await supabase.from("purchases").insert({
-      raw_material_id: form.raw_material_id,
+      raw_material_id: form.tipo === "materia_prima" ? form.raw_material_id : null,
+      product_id: form.tipo === "produto" ? form.product_id : null,
       quantidade: Number(form.quantidade),
       preco_unitario: Number(form.preco_unitario) || 0,
       valor_total: Number(form.valor_total) || 0,
@@ -91,7 +107,7 @@ function CompraDialog({ materiais, onSaved }: { materiais: RawMaterial[]; onSave
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button disabled={materiais.length === 0}>
+        <Button disabled={materiais.length === 0 && produtosRevenda.length === 0}>
           <Plus className="size-4" /> Nova compra
         </Button>
       </DialogTrigger>
@@ -101,20 +117,61 @@ function CompraDialog({ materiais, onSaved }: { materiais: RawMaterial[]; onSave
         </DialogHeader>
         <form onSubmit={salvar} className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Matéria-prima</Label>
-            <Select value={form.raw_material_id} onValueChange={(v) => setForm((f) => ({ ...f, raw_material_id: v }))}>
+            <Label>Tipo</Label>
+            <Select
+              value={form.tipo}
+              onValueChange={(v) =>
+                setForm((f) => ({ ...f, tipo: v as typeof f.tipo, raw_material_id: "", product_id: "" }))
+              }
+            >
               <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {materiais.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.nome} ({m.unidade})
-                  </SelectItem>
-                ))}
+                <SelectItem value="materia_prima">Matéria-prima</SelectItem>
+                <SelectItem value="produto">Produto (revenda)</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {form.tipo === "materia_prima" ? (
+            <div className="space-y-1.5">
+              <Label>Matéria-prima</Label>
+              <Select value={form.raw_material_id} onValueChange={(v) => setForm((f) => ({ ...f, raw_material_id: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {materiais.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.nome} ({m.unidade})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label>Produto</Label>
+              <Select value={form.product_id} onValueChange={(v) => setForm((f) => ({ ...f, product_id: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {produtosRevenda.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome} ({p.unidade})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {produtosRevenda.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Nenhum produto terceirizado ativo. Marque um produto como terceirizado na Ficha técnica primeiro.
+                </p>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label>Quantidade</Label>
@@ -204,12 +261,26 @@ export default function ComprasPage() {
     },
   });
 
+  const { data: produtosRevenda } = useQuery({
+    queryKey: ["produtos-terceirizados-ativos"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, nome, unidade")
+        .eq("ativo", true)
+        .eq("terceirizado", true)
+        .order("nome");
+      if (error) throw error;
+      return (data ?? []) as ResaleProduct[];
+    },
+  });
+
   const { data: compras, isLoading } = useQuery({
     queryKey: ["compras-lista"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("purchases")
-        .select("*, raw_materials(nome, unidade)")
+        .select("*, raw_materials(nome, unidade), products(nome, unidade)")
         .order("data_compra", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(200);
@@ -222,13 +293,17 @@ export default function ComprasPage() {
     queryClient.invalidateQueries({ queryKey: ["compras-lista"] });
     queryClient.invalidateQueries({ queryKey: ["estoque-lista"] });
     queryClient.invalidateQueries({ queryKey: ["materiais-ativos"] });
+    queryClient.invalidateQueries({ queryKey: ["produtos-lista"] });
+    queryClient.invalidateQueries({ queryKey: ["produtos-ativos"] });
+    queryClient.invalidateQueries({ queryKey: ["produtos-ativos-producao"] });
+    queryClient.invalidateQueries({ queryKey: ["products-custo"] });
   }
 
   async function excluir(id: string) {
     const ok = await confirm({
       title: "Excluir compra",
       description:
-        "Excluir esta compra? O estoque já somado NÃO será revertido automaticamente — ajuste manualmente em Estoque se necessário.",
+        "Excluir esta compra? O estoque já somado NÃO será revertido automaticamente — ajuste manualmente se necessário.",
       confirmLabel: "Excluir",
       destructive: true,
     });
@@ -245,8 +320,12 @@ export default function ComprasPage() {
     <div>
       <PageHeader
         title="Compras"
-        subtitle="Entradas de matéria-prima no estoque"
-        actions={isAdmin ? <CompraDialog materiais={materiais ?? []} onSaved={refresh} /> : undefined}
+        subtitle="Entradas de matéria-prima e de produtos terceirizados no estoque"
+        actions={
+          isAdmin ? (
+            <CompraDialog materiais={materiais ?? []} produtosRevenda={produtosRevenda ?? []} onSaved={refresh} />
+          ) : undefined
+        }
       />
 
       {!isAdmin && (
@@ -255,11 +334,15 @@ export default function ComprasPage() {
         </div>
       )}
 
-      {isAdmin && (materiais ?? []).length === 0 && (
+      {isAdmin && (materiais ?? []).length === 0 && (produtosRevenda ?? []).length === 0 && (
         <div className="surface mb-4 p-3 text-sm text-muted-foreground">
           Cadastre uma matéria-prima em{" "}
           <a href="/produtos/estoque" className="underline">
             Estoque
+          </a>{" "}
+          ou marque um produto como terceirizado na{" "}
+          <a href="/produtos/ficha-tecnica" className="underline">
+            Ficha técnica
           </a>{" "}
           antes de registrar compras.
         </div>
@@ -271,7 +354,7 @@ export default function ComprasPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Data</TableHead>
-                <TableHead>Matéria-prima</TableHead>
+                <TableHead>Item</TableHead>
                 <TableHead className="text-right">Quantidade</TableHead>
                 <TableHead className="text-right">Preço unit.</TableHead>
                 <TableHead className="text-right">Total</TableHead>
@@ -296,9 +379,16 @@ export default function ComprasPage() {
                 (compras ?? []).map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>{dateBR(c.data_compra)}</TableCell>
-                    <TableCell className="font-medium">{c.raw_materials?.nome ?? "-"}</TableCell>
+                    <TableCell className="font-medium">
+                      {c.raw_materials?.nome ?? c.products?.nome ?? "-"}
+                      {c.product_id && (
+                        <Badge variant="secondary" className="ml-2 text-[10px]">
+                          Produto
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
-                      {num(c.quantidade, 3)} {c.raw_materials?.unidade}
+                      {num(c.quantidade, 3)} {c.raw_materials?.unidade ?? c.products?.unidade}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">{brl(c.preco_unitario)}</TableCell>
                     <TableCell className="text-right font-medium">{brl(c.valor_total)}</TableCell>

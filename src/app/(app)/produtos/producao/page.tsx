@@ -26,7 +26,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-type Product = { id: string; nome: string; terceirizado: boolean };
+type Product = { id: string; nome: string; terceirizado: boolean; estoque_atual: number; unidade: string };
 
 type ProductionEntry = {
   id: string;
@@ -96,9 +96,9 @@ function ProducaoDialog({ produtos, onSaved }: { produtos: Product[]; onSaved: (
               </SelectContent>
             </Select>
           </div>
-          {selecionado?.terceirizado && (
-            <p className="rounded-lg border border-warning-foreground/30 bg-warning/10 p-2 text-xs text-warning-foreground">
-              Este produto é terceirizado — nenhum insumo será descontado do estoque.
+          {selecionado && (
+            <p className="text-xs text-muted-foreground">
+              Estoque atual: {selecionado.estoque_atual} {selecionado.unidade}. A quantidade produzida abaixo será somada a ele.
             </p>
           )}
           <div className="grid grid-cols-2 gap-3">
@@ -149,12 +149,13 @@ export default function ProducaoPage() {
   const confirm = useConfirm();
 
   const { data: produtos } = useQuery({
-    queryKey: ["produtos-ativos"],
+    queryKey: ["produtos-ativos-producao"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, nome, terceirizado")
+        .select("id, nome, terceirizado, estoque_atual, unidade")
         .eq("ativo", true)
+        .eq("terceirizado", false)
         .order("nome");
       if (error) throw error;
       return (data ?? []) as Product[];
@@ -180,12 +181,16 @@ export default function ProducaoPage() {
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["producao-lista"] });
     queryClient.invalidateQueries({ queryKey: ["estoque-lista"] });
+    queryClient.invalidateQueries({ queryKey: ["produtos-lista"] });
+    queryClient.invalidateQueries({ queryKey: ["produtos-ativos"] });
+    queryClient.invalidateQueries({ queryKey: ["produtos-ativos-producao"] });
   }
 
   async function excluir(id: string) {
     const ok = await confirm({
       title: "Excluir registro de produção",
-      description: "Excluir este registro de produção? O estoque já descontado NÃO será revertido automaticamente.",
+      description:
+        "Excluir este registro de produção? O estoque do produto e da matéria-prima já movimentados NÃO serão revertidos automaticamente.",
       confirmLabel: "Excluir",
       destructive: true,
     });
@@ -202,7 +207,7 @@ export default function ProducaoPage() {
     <div>
       <PageHeader
         title="Produção"
-        subtitle="O que foi produzido de cada produto no dia"
+        subtitle="Lotes produzidos — soma no estoque de venda e desconta matéria-prima"
         actions={isAdmin ? <ProducaoDialog produtos={produtosOrdenados} onSaved={refresh} /> : undefined}
       />
 

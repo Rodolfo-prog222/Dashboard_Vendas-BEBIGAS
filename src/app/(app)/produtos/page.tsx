@@ -7,7 +7,9 @@ import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useMe } from "@/lib/auth";
-import { brl } from "@/lib/format";
+import { useProductsCusto } from "@/lib/products";
+import { brl, num } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/AppShell";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,8 @@ type Product = {
   unidade: string;
   disponivel_hoje: boolean;
   ativo: boolean;
+  terceirizado: boolean;
+  estoque_atual: number;
 };
 
 const CATEGORIAS = ["comida", "sobremesa"];
@@ -44,7 +48,15 @@ function emptyForm() {
   return { nome: "", categoria: "comida", preco: "", custo: "", unidade: "un" };
 }
 
-function ProdutoDialog({ produto, onSaved }: { produto?: Product; onSaved: () => void }) {
+function ProdutoDialog({
+  produto,
+  custoCalculado,
+  onSaved,
+}: {
+  produto?: Product;
+  custoCalculado?: number;
+  onSaved: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(
@@ -52,6 +64,7 @@ function ProdutoDialog({ produto, onSaved }: { produto?: Product; onSaved: () =>
       ? { nome: produto.nome, categoria: produto.categoria, preco: String(produto.preco), custo: String(produto.custo), unidade: produto.unidade }
       : emptyForm(),
   );
+  const custoTravado = !!produto && !produto.terceirizado;
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
@@ -61,7 +74,7 @@ function ProdutoDialog({ produto, onSaved }: { produto?: Product; onSaved: () =>
       nome: form.nome.trim(),
       categoria: form.categoria,
       preco: Number(form.preco) || 0,
-      custo: Number(form.custo) || 0,
+      ...(custoTravado ? {} : { custo: Number(form.custo) || 0 }),
       unidade: form.unidade,
     };
     const { error } = produto
@@ -136,7 +149,21 @@ function ProdutoDialog({ produto, onSaved }: { produto?: Product; onSaved: () =>
             </div>
             <div className="space-y-1.5">
               <Label>Custo (R$)</Label>
-              <Input type="number" min={0} step="0.01" value={form.custo} onChange={(e) => setForm((f) => ({ ...f, custo: e.target.value }))} required />
+              {custoTravado ? (
+                <>
+                  <Input type="text" readOnly disabled value={brl(custoCalculado ?? 0)} />
+                  <p className="text-xs text-muted-foreground">Calculado pela ficha técnica.</p>
+                </>
+              ) : (
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.custo}
+                  onChange={(e) => setForm((f) => ({ ...f, custo: e.target.value }))}
+                  required
+                />
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -164,9 +191,13 @@ export default function ProdutosPage() {
     },
   });
 
+  const { data: custosProdutos } = useProductsCusto();
+
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["produtos-lista"] });
     queryClient.invalidateQueries({ queryKey: ["produtos-ativos"] });
+    queryClient.invalidateQueries({ queryKey: ["produtos-ativos-producao"] });
+    queryClient.invalidateQueries({ queryKey: ["products-custo"] });
   }
 
   async function toggle(id: string, field: "disponivel_hoje" | "ativo", value: boolean) {
@@ -215,6 +246,7 @@ export default function ProdutosPage() {
               <TableHead className="text-right">Preço</TableHead>
               <TableHead className="text-right">Custo</TableHead>
               <TableHead className="text-right">Margem</TableHead>
+              <TableHead className="text-right">Estoque</TableHead>
               <TableHead>Disponível hoje</TableHead>
               <TableHead>Ativo</TableHead>
               {isAdmin && <TableHead />}
@@ -223,13 +255,14 @@ export default function ProdutosPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                   Carregando...
                 </TableCell>
               </TableRow>
             ) : (
               (produtos ?? []).map((p) => {
-                const margem = p.preco > 0 ? ((p.preco - p.custo) / p.preco) * 100 : 0;
+                const custo = custosProdutos?.[p.id] ?? p.custo;
+                const margem = p.preco > 0 ? ((p.preco - custo) / p.preco) * 100 : 0;
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.nome}</TableCell>
@@ -239,8 +272,11 @@ export default function ProdutosPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">{brl(p.preco)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{brl(p.custo)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{brl(custo)}</TableCell>
                     <TableCell className="text-right">{margem.toFixed(0)}%</TableCell>
+                    <TableCell className={cn("text-right", p.estoque_atual <= 0 && "text-destructive")}>
+                      {num(p.estoque_atual, 3)} {p.unidade}
+                    </TableCell>
                     <TableCell>
                       <Switch checked={p.disponivel_hoje} disabled={!isAdmin} onCheckedChange={(v) => toggle(p.id, "disponivel_hoje", v)} />
                     </TableCell>
@@ -250,7 +286,7 @@ export default function ProdutosPage() {
                     {isAdmin && (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <ProdutoDialog produto={p} onSaved={refresh} />
+                          <ProdutoDialog produto={p} custoCalculado={custosProdutos?.[p.id]} onSaved={refresh} />
                           <Button
                             size="icon"
                             variant="ghost"

@@ -226,9 +226,11 @@ export type Database = {
           created_at: string
           custo: number
           disponivel_hoje: boolean
+          estoque_atual: number
           id: string
           nome: string
           preco: number
+          rendimento: number
           terceirizado: boolean
           unidade: string
           updated_at: string
@@ -239,9 +241,11 @@ export type Database = {
           created_at?: string
           custo?: number
           disponivel_hoje?: boolean
+          estoque_atual?: number
           id?: string
           nome: string
           preco?: number
+          rendimento?: number
           terceirizado?: boolean
           unidade?: string
           updated_at?: string
@@ -252,9 +256,11 @@ export type Database = {
           created_at?: string
           custo?: number
           disponivel_hoje?: boolean
+          estoque_atual?: number
           id?: string
           nome?: string
           preco?: number
+          rendimento?: number
           terceirizado?: boolean
           unidade?: string
           updated_at?: string
@@ -294,8 +300,9 @@ export type Database = {
           id: string
           observacoes: string | null
           preco_unitario: number
+          product_id: string | null
           quantidade: number
-          raw_material_id: string
+          raw_material_id: string | null
           valor_total: number
         }
         Insert: {
@@ -306,8 +313,9 @@ export type Database = {
           id?: string
           observacoes?: string | null
           preco_unitario?: number
+          product_id?: string | null
           quantidade: number
-          raw_material_id: string
+          raw_material_id?: string | null
           valor_total?: number
         }
         Update: {
@@ -318,8 +326,9 @@ export type Database = {
           id?: string
           observacoes?: string | null
           preco_unitario?: number
+          product_id?: string | null
           quantidade?: number
-          raw_material_id?: string
+          raw_material_id?: string | null
           valor_total?: number
         }
         Relationships: [
@@ -328,6 +337,13 @@ export type Database = {
             columns: ["raw_material_id"]
             isOneToOne: false
             referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchases_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]
@@ -564,6 +580,14 @@ export type Database = {
         Returns: { customer_id: string; saldo: number }[]
       }
       get_recurring_customers_count: { Args: never; Returns: number }
+      get_products_custo: {
+        Args: never
+        Returns: { product_id: string; custo: number }[]
+      }
+      get_raw_materials_last_cost: {
+        Args: never
+        Returns: { raw_material_id: string; custo: number }[]
+      }
     }
     Enums: {
       app_role: "admin" | "operador"

@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useMe } from "@/lib/auth";
 import { useLoyaltySettings } from "@/lib/loyalty";
-import { brl, todayISO, PAYMENT_METHODS, paymentLabel } from "@/lib/format";
+import { useProductsCusto } from "@/lib/products";
+import { brl, num, todayISO, PAYMENT_METHODS, paymentLabel } from "@/lib/format";
 import { PageHeader } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ type Product = {
   preco: number;
   custo: number;
   unidade: string;
+  estoque_atual: number;
 };
 
 type CartItem = {
@@ -45,12 +47,12 @@ export default function NovaVenda() {
   const { data: me } = useMe();
   const { data: loyalty } = useLoyaltySettings();
 
-  const { data: products } = useQuery({
+  const { data: productsRaw } = useQuery({
     queryKey: ["produtos-ativos"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, nome, categoria, preco, custo, unidade")
+        .select("id, nome, categoria, preco, custo, unidade, estoque_atual")
         .eq("ativo", true)
         .order("categoria")
         .order("nome");
@@ -58,6 +60,8 @@ export default function NovaVenda() {
       return (data ?? []) as Product[];
     },
   });
+  const { data: custosProdutos } = useProductsCusto();
+  const products = productsRaw?.map((p) => ({ ...p, custo: custosProdutos?.[p.id] ?? p.custo }));
 
   const { data: customers } = useQuery({
     queryKey: ["clientes-select"],
@@ -92,6 +96,11 @@ export default function NovaVenda() {
   const selectedCustomer = customers?.find((c) => c.id === customerId);
 
   function addToCart(p: Product) {
+    const noCarrinho = cart.find((i) => i.product_id === p.id)?.quantidade ?? 0;
+    if (noCarrinho + 1 > p.estoque_atual) {
+      toast.error(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque_atual} ${p.unidade}).`);
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((i) => i.product_id === p.id);
       if (existing) {
@@ -112,6 +121,11 @@ export default function NovaVenda() {
   }
 
   function setQty(id: string, qty: number) {
+    const estoque = products?.find((p) => p.id === id)?.estoque_atual ?? Infinity;
+    if (qty > estoque) {
+      toast.error(`Estoque insuficiente (disponível: ${estoque}).`);
+      qty = estoque;
+    }
     setCart((prev) =>
       qty <= 0 ? prev.filter((i) => i.product_id !== id) : prev.map((i) => (i.product_id === id ? { ...i, quantidade: qty } : i)),
     );
@@ -143,6 +157,7 @@ export default function NovaVenda() {
     if (Math.abs(diferenca) > 0.01) return toast.error(`O total pago (${brl(totalPago)}) não bate com o total da venda (${brl(total)}).`);
 
     setSaving(true);
+    let saleId: string | null = null;
     try {
       const { data: sale, error: saleError } = await supabase
         .from("sales")
@@ -160,6 +175,7 @@ export default function NovaVenda() {
         .select("id")
         .single();
       if (saleError || !sale) throw saleError ?? new Error("Falha ao criar venda");
+      saleId = sale.id;
 
       const itemsPayload = cart.map((i) => ({
         sale_id: sale.id,
@@ -191,6 +207,9 @@ export default function NovaVenda() {
       router.push("/vendas");
       router.refresh();
     } catch (err) {
+      // itens/pagamentos podem falhar (ex.: estoque insuficiente) depois que a venda já
+      // foi criada — apaga a venda órfã em vez de deixá-la sem itens.
+      if (saleId) await supabase.from("sales").delete().eq("id", saleId);
       toast.error(err instanceof Error ? err.message : "Erro ao registrar a venda.");
     } finally {
       setSaving(false);
@@ -203,16 +222,23 @@ export default function NovaVenda() {
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {items.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => addToCart(p)}
-              className="surface flex flex-col items-start gap-1 p-3 text-left transition-colors hover:border-primary hover:bg-primary-soft/40"
-            >
-              <span className="text-sm font-medium leading-tight">{p.nome}</span>
-              <span className="text-xs text-muted-foreground">{brl(p.preco)} / {p.unidade}</span>
-            </button>
-          ))}
+          {items.map((p) => {
+            const semEstoque = p.estoque_atual <= 0;
+            return (
+              <button
+                key={p.id}
+                onClick={() => addToCart(p)}
+                disabled={semEstoque}
+                className="surface flex flex-col items-start gap-1 p-3 text-left transition-colors hover:border-primary hover:bg-primary-soft/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-transparent disabled:hover:bg-transparent"
+              >
+                <span className="text-sm font-medium leading-tight">{p.nome}</span>
+                <span className="text-xs text-muted-foreground">{brl(p.preco)} / {p.unidade}</span>
+                <span className={cn("text-[11px]", semEstoque ? "text-destructive" : "text-muted-foreground")}>
+                  {semEstoque ? "Sem estoque" : `${num(p.estoque_atual, 3)} ${p.unidade} em estoque`}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
