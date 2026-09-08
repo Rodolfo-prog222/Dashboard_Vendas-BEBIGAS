@@ -60,7 +60,8 @@ function FichaDialog({
   const [modo, setModo] = useState<Modo>("receita");
   const [rendimento, setRendimento] = useState(String(produto.rendimento));
   const [baseProductId, setBaseProductId] = useState("");
-  const [fator, setFator] = useState("1");
+  const [qtdVariacao, setQtdVariacao] = useState("1");
+  const [qtdBase, setQtdBase] = useState("1");
   const [rows, setRows] = useState<RecipeRow[]>([]);
 
   useEffect(() => {
@@ -68,7 +69,8 @@ function FichaDialog({
     setModo(produto.base_product_id ? "variacao" : produto.terceirizado ? "terceirizado" : "receita");
     setRendimento(String(produto.rendimento));
     setBaseProductId(produto.base_product_id ?? "");
-    setFator(String(produto.fator_conversao));
+    setQtdVariacao("1");
+    setQtdBase(String(produto.fator_conversao));
     setLoading(true);
     supabase
       .from("recipe_items")
@@ -85,7 +87,8 @@ function FichaDialog({
   const custoLote = rows.reduce((s, r) => s + (Number(r.quantidade) || 0) * (custosMateriais[r.raw_material_id] ?? 0), 0);
   const custoPorUnidade = Number(rendimento) > 0 ? custoLote / Number(rendimento) : 0;
   const baseSelecionado = produtosBase.find((p) => p.id === baseProductId);
-  const custoVariacao = (custosProdutos[baseProductId] ?? 0) * (Number(fator) || 0);
+  const fator = (Number(qtdVariacao) || 0) > 0 ? (Number(qtdBase) || 0) / Number(qtdVariacao) : 0;
+  const custoVariacao = (custosProdutos[baseProductId] ?? 0) * fator;
 
   function addRow() {
     setRows((prev) => [...prev, { raw_material_id: "", quantidade: "" }]);
@@ -109,8 +112,8 @@ function FichaDialog({
     if (modo === "variacao" && !baseProductId) {
       return toast.error("Selecione o produto base.");
     }
-    if (modo === "variacao" && (!fator || Number(fator) <= 0)) {
-      return toast.error("Informe o fator de conversão.");
+    if (modo === "variacao" && (!(Number(qtdVariacao) > 0) || !(Number(qtdBase) > 0))) {
+      return toast.error("Informe a proporção entre este produto e o produto base.");
     }
     setSaving(true);
     try {
@@ -120,7 +123,7 @@ function FichaDialog({
           terceirizado: modo === "terceirizado",
           rendimento: modo === "receita" ? Number(rendimento) : 1,
           base_product_id: modo === "variacao" ? baseProductId : null,
-          fator_conversao: modo === "variacao" ? Number(fator) : 1,
+          fator_conversao: modo === "variacao" ? fator : 1,
         })
         .eq("id", produto.id);
       if (prodError) throw prodError;
@@ -197,12 +200,33 @@ function FichaDialog({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Fator de conversão</Label>
-                <Input type="number" min={0} step="0.0001" className="w-32" value={fator} onChange={(e) => setFator(e.target.value)} required />
+                <Label>Proporção com o produto base</Label>
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="1"
+                    className="w-16"
+                    value={qtdVariacao}
+                    onChange={(e) => setQtdVariacao(e.target.value)}
+                    required
+                  />
+                  <span>{produto.nome}(s) equivale(m) a</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    className="w-16"
+                    value={qtdBase}
+                    onChange={(e) => setQtdBase(e.target.value)}
+                    required
+                  />
+                  <span>{baseSelecionado ? baseSelecionado.nome : "produto base"}(s)</span>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Quantas unidades de {baseSelecionado ? `"${baseSelecionado.nome}"` : "estoque do produto base"} 1 unidade deste produto
-                  consome. Ex.: fator 2,33 quer dizer que vender 1 unidade daqui desconta 2,33 unidades do estoque do produto base — e o
-                  custo daqui é o custo do produto base × esse fator.
+                  Ex.: 3 e 7 quer dizer &ldquo;3 {produto.nome} equivalem a 7 {baseSelecionado?.nome ?? "produto base"}&rdquo; — o sistema
+                  calcula o fator exato sozinho (aqui: {num(fator, 4)}), sem arredondar. Esse fator é usado pra descontar o estoque do
+                  produto base e calcular o custo.
                 </p>
               </div>
               {baseProductId && (
